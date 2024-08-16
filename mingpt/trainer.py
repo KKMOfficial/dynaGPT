@@ -21,7 +21,7 @@ class Trainer:
         C.num_workers = 4
         # optimizer parameters
         C.max_iters = None
-        C.batch_size = 64
+        C.batch_size = 4
         C.learning_rate = 3e-4
         C.betas = (0.9, 0.95)
         C.weight_decay = 0.1 # only applied on matmul weights
@@ -67,11 +67,11 @@ class Trainer:
         # setup the dataloader
         train_loader = DataLoader(
             self.train_dataset,
-            sampler=torch.utils.data.RandomSampler(self.train_dataset, replacement=True, num_samples=int(1e10)),
+            sampler=torch.utils.data.RandomSampler(self.train_dataset, replacement=True, num_samples=int(1e2)),
             shuffle=False,
             pin_memory=True,
             batch_size=config.batch_size,
-            num_workers=config.num_workers,
+            num_workers=0,
         )
 
         model.train()
