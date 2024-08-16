@@ -139,6 +139,7 @@ class GPT(nn.Module):
                 'gpt-mini':     dict(n_layer=6, n_head=6, n_embd=192),
                 'gpt-micro':    dict(n_layer=4, n_head=4, n_embd=128),
                 'gpt-nano':     dict(n_layer=3, n_head=3, n_embd=48),
+                'gpt-dyna':     dict(n_layer=6, n_head=3,n_embd=48),
             }[config.model_type])
 
         self.transformer = nn.ModuleDict(dict(
@@ -280,13 +281,26 @@ class GPT(nn.Module):
         return logits, loss
 
     @torch.no_grad()
-    def generate(self, idx, max_new_tokens, temperature=1.0, do_sample=False, top_k=None):
+    def generate(self, idx, temperature=1.0, do_sample=False, top_k=None, n_actions=10):
         """
         Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
         Most likely you'll want to make sure to be in model.eval() mode of operation for this.
+        Modified version : 
+        - only feed the state predictions back to the model
+        - we add a variable to keep track of tokens
+        - context vector (idx) is guaranteed to have size (S[1]+A[1]+...+A[n_actions],)
         """
-        for _ in range(max_new_tokens):
+        ACTION_DIM = 56
+        STATE_DIM  = 206
+        conditinoal_input = idx[:STATE_DIM + ACTION_DIM]
+        idx               = idx[STATE_DIM + ACTION_DIM:]
+        # S1,A1,A2,A3 , n_action = 3
+        # S1,A1 = context
+        # S2,A2,S3,A3,S4 output = (S2,A2),(S3,A3),S4
+        max_new_tokens    = (STATE_DIM + ACTION_DIM) * (n_actions - 1) + STATE_DIM
+        
+        for current_index in range(max_new_tokens):
             # if the sequence context is growing too long we must crop it at block_size
             idx_cond = idx if idx.size(1) <= self.block_size else idx[:, -self.block_size:]
             # forward the model to get the logits for the index in the sequence
@@ -305,6 +319,10 @@ class GPT(nn.Module):
             else:
                 _, idx_next = torch.topk(probs, k=1, dim=-1)
             # append sampled index to the running sequence and continue
-            idx = torch.cat((idx, idx_next), dim=1)
+            # conditionally append : 
+            #       we append generated states only
+            #       use the original actions from the context
+            idx = torch.cat((idx, 
+                             idx_next if current_index%(STATE_DIM+ACTION_DIM) < STATE_DIM else conditinoal_input.pop(0)) , dim=1)
 
         return idx
