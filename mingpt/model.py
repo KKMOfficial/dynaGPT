@@ -13,6 +13,7 @@ import math
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+from tqdm import tqdm
 
 from mingpt.utils import CfgNode as CN
 
@@ -293,14 +294,15 @@ class GPT(nn.Module):
         """
         ACTION_DIM = 56
         STATE_DIM  = 206
-        conditinoal_input = idx[:STATE_DIM + ACTION_DIM]
-        idx               = idx[STATE_DIM + ACTION_DIM:]
+        conditional_input = torch.clone(idx[:,STATE_DIM + ACTION_DIM:])
+        idx               = torch.clone(idx[:,:STATE_DIM + ACTION_DIM])
+        current_input_idx = 0
         # S1,A1,A2,A3 , n_action = 3
         # S1,A1 = context
         # S2,A2,S3,A3,S4 output = (S2,A2),(S3,A3),S4
         max_new_tokens    = (STATE_DIM + ACTION_DIM) * (n_actions - 1) + STATE_DIM
         
-        for current_index in range(max_new_tokens):
+        for current_index in tqdm(range(max_new_tokens)):
             # if the sequence context is growing too long we must crop it at block_size
             idx_cond = idx if idx.size(1) <= self.block_size else idx[:, -self.block_size:]
             # forward the model to get the logits for the index in the sequence
@@ -322,7 +324,10 @@ class GPT(nn.Module):
             # conditionally append : 
             #       we append generated states only
             #       use the original actions from the context
-            idx = torch.cat((idx, 
-                             idx_next if current_index%(STATE_DIM+ACTION_DIM) < STATE_DIM else conditinoal_input.pop(0)) , dim=1)
+
+            # print(f'current index = {current_index}, input is = {"<STATE OUTPUT>" if current_index%(STATE_DIM+ACTION_DIM)<STATE_DIM else "<ACTION INPUT>"}, conditional input index = {current_input_idx}')
+            idx = torch.cat((idx, idx_next if current_index%(STATE_DIM+ACTION_DIM) < STATE_DIM else (conditional_input[:,current_input_idx] if conditional_input.shape[0]>1 else conditional_input[:,current_input_idx].unsqueeze(0))) , dim=1)
+            if current_index%(STATE_DIM+ACTION_DIM)>STATE_DIM : current_input_idx += 1
+                
 
         return idx
