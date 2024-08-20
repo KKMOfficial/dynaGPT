@@ -18,10 +18,10 @@ class Trainer:
         # device to train on
         C.device = 'cpu'#'auto'
         # dataloder parameters
-        C.num_workers = 4
+        C.num_workers = 0
         # optimizer parameters
         C.max_iters = None
-        C.batch_size = 2
+        C.batch_size = 50000
         C.learning_rate = 3e-4
         C.betas = (0.9, 0.95)
         C.weight_decay = 0.1 # only applied on matmul weights
@@ -47,6 +47,7 @@ class Trainer:
         self.iter_num = 0
         self.iter_time = 0.0
         self.iter_dt = 0.0
+        self.train_loss_history = []
 
     def add_callback(self, onevent: str, callback):
         self.callbacks[onevent].append(callback)
@@ -71,7 +72,7 @@ class Trainer:
             shuffle=False,
             pin_memory=True,
             batch_size=config.batch_size,
-            num_workers=config.num_workers,
+            num_workers=0,
         )
 
         model.train()
