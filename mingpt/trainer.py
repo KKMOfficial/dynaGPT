@@ -5,7 +5,6 @@ so nothing in this file really has anything to do with GPT specifically.
 
 import time
 from collections import defaultdict
-from tqdm import tqdm
 import torch
 import numpy as np
 from torch.utils.data.dataloader import DataLoader
@@ -66,7 +65,7 @@ class Trainer:
         model, config = self.model, self.config
         valid_loader = DataLoader(
             self.valid_dataset,
-            sampler=torch.utils.data.RandomSampler(self.train_dataset, replacement=True, num_samples=int(1e2)),
+            sampler=torch.utils.data.RandomSampler(self.valid_dataset, replacement=True, num_samples=int(1e2)),
             shuffle=False,
             pin_memory=True,
             batch_size=config.batch_size,
@@ -75,7 +74,8 @@ class Trainer:
 
         valid_result = []
         model.eval()
-        for _ in tqdm(range(iters)):
+        data_iter = iter(valid_loader)
+        for _ in range(iters):
             with torch.no_grad():
                 try:
                     batch = next(data_iter)
@@ -87,9 +87,8 @@ class Trainer:
 
                 # forward the model
                 _, self.loss = model(x, y)
-                valid_result += [self.loss]
+                valid_result += [self.loss.item()]
         validation_loss = np.array(valid_result).mean().item()
-        print(f"avg validation loss : {validation_loss}")
         return validation_loss
 
 
