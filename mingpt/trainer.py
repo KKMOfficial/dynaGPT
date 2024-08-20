@@ -71,7 +71,7 @@ class Trainer:
             shuffle=False,
             pin_memory=True,
             batch_size=config.batch_size,
-            num_workers=0,
+            num_workers=config.num_workers,
         )
 
         model.train()
