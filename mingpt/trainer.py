@@ -61,7 +61,7 @@ class Trainer:
         for callback in self.callbacks.get(onevent, []):
             callback(self)
 
-    def validate(self):
+    def validate(self, iters=5):
         assert not (self.valid_dataset is None), "make sure validation dataset is not empty!"
         model, config = self.model, self.config
         valid_loader = DataLoader(
@@ -75,7 +75,7 @@ class Trainer:
 
         valid_result = []
         model.eval()
-        for _ in tqdm(range(5)):
+        for _ in tqdm(range(iters)):
             with torch.no_grad():
                 try:
                     batch = next(data_iter)
@@ -90,7 +90,7 @@ class Trainer:
                 valid_result += [self.loss]
         validation_loss = np.array(valid_result).mean().item()
         print(f"avg validation loss : {validation_loss}")
-        self.train_loss_history[-1] += [validation_loss]
+        return validation_loss
 
 
     def run(self):
