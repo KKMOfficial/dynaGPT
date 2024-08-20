@@ -326,9 +326,7 @@ class GPT(nn.Module):
             #       use the original actions from the context
 
             # print(f'current index = {current_index}, input is = {"<STATE OUTPUT>" if current_index%(STATE_DIM+ACTION_DIM)<STATE_DIM else "<ACTION INPUT>"}, conditional input index = {current_input_idx}')
-            idx = torch.cat((idx, idx_next if current_index%(STATE_DIM+ACTION_DIM) < STATE_DIM 
-                                           else (conditional_input[:,current_input_idx] if conditional_input.shape[0]>1 
-                                           else conditional_input[:,current_input_idx].unsqueeze(0))) , dim=1)
+            idx = torch.cat((idx, idx_next if current_index%(STATE_DIM+ACTION_DIM) < STATE_DIM else (conditional_input[:,current_input_idx] if conditional_input.shape[0]>1 else conditional_input[:,current_input_idx].unsqueeze(0))) , dim=1)
             if current_index%(STATE_DIM+ACTION_DIM)>STATE_DIM : current_input_idx += 1
                 
 
