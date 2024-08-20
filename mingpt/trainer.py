@@ -5,8 +5,9 @@ so nothing in this file really has anything to do with GPT specifically.
 
 import time
 from collections import defaultdict
-
+from tqdm import tqdm
 import torch
+import numpy as np
 from torch.utils.data.dataloader import DataLoader
 from mingpt.utils import CfgNode as CN
 
@@ -18,21 +19,22 @@ class Trainer:
         # device to train on
         C.device = 'cpu'#'auto'
         # dataloder parameters
-        C.num_workers = 0
+        C.num_workers = 4
         # optimizer parameters
         C.max_iters = None
-        C.batch_size = 50000
+        C.batch_size = 2
         C.learning_rate = 3e-4
         C.betas = (0.9, 0.95)
         C.weight_decay = 0.1 # only applied on matmul weights
         C.grad_norm_clip = 1.0
         return C
 
-    def __init__(self, config, model, train_dataset):
+    def __init__(self, config, model, train_dataset, valid_dataset=None):
         self.config = config
         self.model = model
         self.optimizer = None
         self.train_dataset = train_dataset
+        self.valid_dataset = valid_dataset
         self.callbacks = defaultdict(list)
 
         # determine the device we'll train on
@@ -58,6 +60,38 @@ class Trainer:
     def trigger_callbacks(self, onevent: str):
         for callback in self.callbacks.get(onevent, []):
             callback(self)
+
+    def validate(self):
+        assert not (self.valid_dataset is None), "make sure validation dataset is not empty!"
+        model, config = self.model, self.config
+        valid_loader = DataLoader(
+            self.valid_dataset,
+            sampler=torch.utils.data.RandomSampler(self.train_dataset, replacement=True, num_samples=int(1e2)),
+            shuffle=False,
+            pin_memory=True,
+            batch_size=config.batch_size,
+            num_workers=0,
+        )
+
+        valid_result = []
+        model.eval()
+        for _ in tqdm(range(5)):
+            with torch.no_grad():
+                try:
+                    batch = next(data_iter)
+                except StopIteration:
+                    data_iter = iter(valid_loader)
+                    batch = next(data_iter)
+                batch = [t.to(self.device) for t in batch]
+                x, y = batch
+
+                # forward the model
+                _, self.loss = model(x, y)
+                valid_result += [self.loss]
+        validation_loss = np.array(valid_result).mean().item()
+        print(f"avg validation loss : {validation_loss}")
+        self.train_loss_history[-1] += [validation_loss]
+
 
     def run(self):
         model, config = self.model, self.config
