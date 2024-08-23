@@ -293,7 +293,7 @@ class GPT(nn.Module):
         - context vector (idx) is guaranteed to have size (S[1]+A[1]+...+A[n_actions],)
         """
         ACTION_DIM = 56
-        STATE_DIM  = 206
+        STATE_DIM  = 24
         conditional_input = torch.clone(idx[:,STATE_DIM + ACTION_DIM:])
         idx               = torch.clone(idx[:,:STATE_DIM + ACTION_DIM])
         current_input_idx = 0
@@ -326,8 +326,13 @@ class GPT(nn.Module):
             #       use the original actions from the context
 
             # print(f'current index = {current_index}, input is = {"<STATE OUTPUT>" if current_index%(STATE_DIM+ACTION_DIM)<STATE_DIM else "<ACTION INPUT>"}, conditional input index = {current_input_idx}')
-            idx = torch.cat((idx, idx_next if current_index%(STATE_DIM+ACTION_DIM) < STATE_DIM else (conditional_input[:,current_input_idx] if conditional_input.shape[0]>1 else conditional_input[:,current_input_idx].unsqueeze(0))) , dim=1)
-            if current_index%(STATE_DIM+ACTION_DIM)>STATE_DIM : current_input_idx += 1
+            if current_index%(STATE_DIM+ACTION_DIM)>=STATE_DIM : 
+                idx = torch.cat((idx, conditional_input[:,current_input_idx] if conditional_input.shape[0]>1 else conditional_input[:,current_input_idx].unsqueeze(0)) , dim=1)
+                current_input_idx += 1
+            else: 
+                idx = torch.cat((idx, idx_next), dim=1)
+            
+            
                 
 
         return idx
