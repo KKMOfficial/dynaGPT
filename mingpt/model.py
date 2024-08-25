@@ -281,8 +281,9 @@ class GPT(nn.Module):
 
         return logits, loss
 
+
     @torch.no_grad()
-    def generate(self, idx, temperature=1.0, do_sample=False, top_k=None, n_actions=10):
+    def generate(self, idx, temperature=1.0, do_sample=False, top_k=None, n_actions=10, actor_network=None, vqvae=None):
         """
         Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
@@ -291,10 +292,19 @@ class GPT(nn.Module):
         - only feed the state predictions back to the model
         - we add a variable to keep track of tokens
         - context vector (idx) is guaranteed to have size (S[1]+A[1]+...+A[n_actions],)
+        - will gradually generate the sequence if provided with a actor network! otherwise assumes its input containes actions
         """
         ACTION_DIM = 56
         STATE_DIM  = 24
-        conditional_input = torch.clone(idx[:,STATE_DIM + ACTION_DIM:])
+
+        # manage actions
+        if not actor_network is None:
+            assert not vqvae is None, "model needs vqvae to decode and generate next actions"
+            conditional_input = torch.empty(ACTION_DIM)
+        else:
+            conditional_input = torch.clone(idx[:,STATE_DIM + ACTION_DIM:])
+
+        # contenxt must be provided in any case
         idx               = torch.clone(idx[:,:STATE_DIM + ACTION_DIM])
         current_input_idx = 0
         # S1,A1,A2,A3 , n_action = 3
@@ -303,8 +313,8 @@ class GPT(nn.Module):
         max_new_tokens    = (STATE_DIM + ACTION_DIM) * (n_actions - 1) + STATE_DIM
         
         for current_index in tqdm(range(max_new_tokens)):
-            # if the sequence context is growing too long we must crop it at block_size
-            idx_cond = idx if idx.size(1) <= self.block_size else idx[:, -self.block_size:]
+            # if the sequence context is growing too long we must crop it at block_size idx[:, -self.block_size:]
+            idx_cond = idx if idx.size(1) <= self.block_size else idx[:,80*(1+(idx.size(1)-self.block_size)//80):]
             # forward the model to get the logits for the index in the sequence
             logits, _ = self(idx_cond)
             # pluck the logits at the final step and scale by desired temperature
@@ -322,17 +332,19 @@ class GPT(nn.Module):
                 _, idx_next = torch.topk(probs, k=1, dim=-1)
             # append sampled index to the running sequence and continue
             # conditionally append : 
-            #       we append generated states only
-            #       use the original actions from the context
+            # we append generated states only
+            # use the original actions from the context
 
             # print(f'current index = {current_index}, input is = {"<STATE OUTPUT>" if current_index%(STATE_DIM+ACTION_DIM)<STATE_DIM else "<ACTION INPUT>"}, conditional input index = {current_input_idx}')
             if current_index%(STATE_DIM+ACTION_DIM)>=STATE_DIM : 
+                # first occurance means its time to generate action if function provided with actor
+                if (not actor_network is None) and (current_index%(STATE_DIM+ACTION_DIM)==STATE_DIM):
+                    next_action = torch.clamp(torch.tensor(actor_network.predict(vqvae.decode_indices(idx[:,-STATE_DIM:]).detach().numpy(), deterministic=False)[0]), min=-1.0, max=+1.0)
+                    conditional_input = next_action if current_input_idx==0 else torch.cat([conditional_input, next_action], axis=1)
+
                 idx = torch.cat((idx, conditional_input[:,current_input_idx] if conditional_input.shape[0]>1 else conditional_input[:,current_input_idx].unsqueeze(0)) , dim=1)
                 current_input_idx += 1
             else: 
                 idx = torch.cat((idx, idx_next), dim=1)
-            
-            
-                
 
         return idx
